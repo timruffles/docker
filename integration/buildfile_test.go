@@ -10,9 +10,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+var useCacheRe *regexp.Regexp
+var ignoreCacheRe *regexp.Regexp = regexp.MustCompile(".*")
 
 // mkTestContext generates a build context from the contents of the provided dockerfile.
 // This context is suitable for use as an argument to BuildFile.Build()
@@ -321,7 +325,14 @@ func buildImage(context testContextTemplate, t *testing.T, eng *engine.Engine, u
 	}
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := docker.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, useCache, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
+	var cacheBreak *regexp.Regexp
+	if useCache {
+		cacheBreak = useCacheRe
+	} else {
+		cacheBreak = ignoreCacheRe
+	}
+
+	buildfile := docker.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, cacheBreak, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
 	id, err := buildfile.Build(mkTestContext(dockerfile, context.files, t))
 	if err != nil {
 		return nil, err
