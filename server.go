@@ -20,6 +20,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -426,10 +427,11 @@ func (srv *Server) Build(job *engine.Job) engine.Status {
 		return job.Errorf("Usage: %s\n", job.Name)
 	}
 	var (
+    // TODO get cache-bust argument to here
 		remoteURL      = job.Getenv("remote")
 		repoName       = job.Getenv("t")
 		suppressOutput = job.GetenvBool("q")
-		noCache        = job.GetenvBool("nocache")
+		noCache        = job.Getenv("nocache")
 		rm             = job.GetenvBool("rm")
 		authConfig     = &auth.AuthConfig{}
 		configFile     = &auth.ConfigFile{}
@@ -478,6 +480,15 @@ func (srv *Server) Build(job *engine.Job) engine.Status {
 		context = c
 	}
 
+	var noCacheRe *regexp.Regexp
+	if noCache != "" {
+		re, err := regexp.Compile(noCache)
+		if err != nil {
+			return job.Error(err)
+		}
+		noCacheRe = re
+	}
+
 	sf := utils.NewStreamFormatter(job.GetenvBool("json"))
 	b := NewBuildFile(srv,
 		&StdoutFormater{
@@ -488,7 +499,7 @@ func (srv *Server) Build(job *engine.Job) engine.Status {
 			Writer:          job.Stdout,
 			StreamFormatter: sf,
 		},
-		!suppressOutput, !noCache, rm, job.Stdout, sf, authConfig, configFile)
+		!suppressOutput, noCacheRe, rm, job.Stdout, sf, authConfig, configFile)
 	id, err := b.Build(context)
 	if err != nil {
 		return job.Error(err)

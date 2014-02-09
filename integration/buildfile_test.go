@@ -15,7 +15,6 @@ import (
 	"testing"
 )
 
-var useCacheRe *regexp.Regexp
 var ignoreCacheRe *regexp.Regexp = regexp.MustCompile(".*")
 
 // mkTestContext generates a build context from the contents of the provided dockerfile.
@@ -327,7 +326,7 @@ func buildImage(context testContextTemplate, t *testing.T, eng *engine.Engine, u
 
 	var cacheBreak *regexp.Regexp
 	if useCache {
-		cacheBreak = useCacheRe
+		cacheBreak = nil
 	} else {
 		cacheBreak = ignoreCacheRe
 	}
@@ -552,6 +551,15 @@ func TestBuildImageWithoutCache(t *testing.T) {
 	checkCacheBehavior(t, template, false)
 }
 
+func TestBuildImageCacheRegexpSkips(t *testing.T) {
+	template := testContextTemplate{`
+        from {IMAGE}
+        maintainer dockerio
+        RUN touch some-file
+        `,
+		nil, nil}
+}
+
 func TestBuildADDLocalFileWithCache(t *testing.T) {
 	template := testContextTemplate{`
         from {IMAGE}
@@ -736,7 +744,7 @@ func TestForbiddenContextPath(t *testing.T) {
 	}
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := docker.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, true, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
+	buildfile := docker.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, useCacheRe, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
 	_, err = buildfile.Build(mkTestContext(dockerfile, context.files, t))
 
 	if err == nil {
@@ -782,7 +790,7 @@ func TestBuildADDFileNotFound(t *testing.T) {
 	}
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := docker.NewBuildFile(mkServerFromEngine(eng, t), ioutil.Discard, ioutil.Discard, false, true, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
+	buildfile := docker.NewBuildFile(mkServerFromEngine(eng, t), ioutil.Discard, ioutil.Discard, false, useCacheRe, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
 	_, err = buildfile.Build(mkTestContext(dockerfile, context.files, t))
 
 	if err == nil {

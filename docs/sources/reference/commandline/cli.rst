@@ -187,7 +187,7 @@ Examples:
       -t, --time="": Repository name (and optionally a tag) to be applied 
              to the resulting image in case of success.
       -q, --quiet=false: Suppress verbose build output.
-      --no-cache: Do not use the cache when building the image.
+      --no-cache: A regex to disable caching for matching ADD and RUN commands
       --rm: Remove intermediate containers after a successful build
 
 The files at ``PATH`` or ``URL`` are called the "context" of the build. The

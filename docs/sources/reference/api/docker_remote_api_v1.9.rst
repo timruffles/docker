@@ -1031,7 +1031,7 @@ Build an image from Dockerfile via stdin
 
    :query t: repository name (and optionally a tag) to be applied to the resulting image in case of success
    :query q: suppress verbose build output
-   :query nocache: do not use the cache when building the image
+   :query nocache: a regex string to selectively disable cache for matching ADD and RUN commands
    :reqheader Content-type: should be set to ``"application/tar"``.
    :reqheader X-Registry-Config: base64-encoded ConfigFile object
    :statuscode 200: no error

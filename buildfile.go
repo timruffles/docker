@@ -34,31 +34,31 @@ type BuildFile interface {
 
 type buildFile struct {
 	runtime *Runtime
-	srv     *Server
+	srv			*Server
 
-	image      string
+	image			 string
 	maintainer string
-	config     *Config
+	config		 *Config
 
 	contextPath string
-	context     *utils.TarSum
+	context			*utils.TarSum
 
-	verbose      bool
-	utilizeCache bool
-	rm           bool
+	verbose			 bool
+	cacheBreak	 *regexp.Regexp
+	rm					 bool
 
 	authConfig *auth.AuthConfig
 	configFile *auth.ConfigFile
 
 	tmpContainers map[string]struct{}
-	tmpImages     map[string]struct{}
+	tmpImages			map[string]struct{}
 
 	outStream io.Writer
 	errStream io.Writer
 
 	// Deprecated, original writer used for ImagePull. To be removed.
 	outOld io.Writer
-	sf     *utils.StreamFormatter
+	sf		 *utils.StreamFormatter
 }
 
 func (b *buildFile) clearTmp(containers map[string]struct{}) {
@@ -133,23 +133,20 @@ func (b *buildFile) CmdMaintainer(name string) error {
 	return b.commit("", b.config.Cmd, fmt.Sprintf("MAINTAINER %s", name))
 }
 
-// probeCache checks to see if image-caching is enabled (`b.utilizeCache`)
-// and if so attempts to look up the current `b.image` and `b.config` pair
+// Attempts to look up the current `b.image` and `b.config` pair
 // in the current server `b.srv`. If an image is found, probeCache returns
 // `(true, nil)`. If no image is found, it returns `(false, nil)`. If there
 // is any error, it returns `(false, err)`.
 func (b *buildFile) probeCache() (bool, error) {
-	if b.utilizeCache {
-		if cache, err := b.srv.ImageGetCached(b.image, b.config); err != nil {
-			return false, err
-		} else if cache != nil {
-			fmt.Fprintf(b.outStream, " ---> Using cache\n")
-			utils.Debugf("[BUILDER] Use cached version")
-			b.image = cache.ID
-			return true, nil
-		} else {
-			utils.Debugf("[BUILDER] Cache miss")
-		}
+	if cache, err := b.srv.ImageGetCached(b.image, b.config); err != nil {
+		return false, err
+	} else if cache != nil {
+		fmt.Fprintf(b.outStream, " ---> Using cache\n")
+		utils.Debugf("[BUILDER] Use cached version")
+		b.image = cache.ID
+		return true, nil
+	} else {
+		utils.Debugf("[BUILDER] Cache miss")
 	}
 	return false, nil
 }
@@ -171,12 +168,16 @@ func (b *buildFile) CmdRun(args string) error {
 
 	utils.Debugf("Command to be executed: %v", b.config.Cmd)
 
-	hit, err := b.probeCache()
-	if err != nil {
-		return err
-	}
-	if hit {
-		return nil
+	if b.utilizeCache(cmd) {
+
+		hit, err := b.probeCache()
+		if err != nil {
+			return err
+		}
+		if hit {
+			return nil
+		}
+
 	}
 
 	cid, err := b.run()
@@ -188,6 +189,14 @@ func (b *buildFile) CmdRun(args string) error {
 	}
 
 	return nil
+}
+
+func (b *buildFile) utilizeCache(cmd []string) bool {
+	if(b.cacheBreak == nil) {
+		return true
+	}
+	cmdString := strings.Join(cmd," ")
+	return !b.cacheBreak.MatchString(cmdString)
 }
 
 func (b *buildFile) FindEnvKey(key string) int {
@@ -401,8 +410,8 @@ func (b *buildFile) CmdAdd(args string) error {
 
 	// FIXME: do we really need this?
 	var (
-		origPath   = orig
-		destPath   = dest
+		origPath	 = orig
+		destPath	 = dest
 		remoteHash string
 	)
 
@@ -460,7 +469,7 @@ func (b *buildFile) CmdAdd(args string) error {
 	}
 
 	// Hash path and check the cache
-	if b.utilizeCache {
+	if b.utilizeCache(cmd) {
 		var (
 			hash string
 			sums = b.context.GetSums()
@@ -595,7 +604,7 @@ func (b *buildFile) run() (string, error) {
 	if ret := c.Wait(); ret != 0 {
 		err := &utils.JSONError{
 			Message: fmt.Sprintf("The command %v returned a non-zero code: %d", b.config.Cmd, ret),
-			Code:    ret,
+			Code:		 ret,
 		}
 		return "", err
 	}
@@ -738,21 +747,21 @@ func (b *buildFile) BuildStep(name, expression string) error {
 	return nil
 }
 
-func NewBuildFile(srv *Server, outStream, errStream io.Writer, verbose, utilizeCache, rm bool, outOld io.Writer, sf *utils.StreamFormatter, auth *auth.AuthConfig, authConfigFile *auth.ConfigFile) BuildFile {
+func NewBuildFile(srv *Server, outStream, errStream io.Writer, verbose bool, cacheBreak *regexp.Regexp, rm bool, outOld io.Writer, sf *utils.StreamFormatter, auth *auth.AuthConfig, authConfigFile *auth.ConfigFile) BuildFile {
 	return &buildFile{
-		runtime:       srv.runtime,
-		srv:           srv,
-		config:        &Config{},
-		outStream:     outStream,
-		errStream:     errStream,
+		runtime:			 srv.runtime,
+		srv:					 srv,
+		config:				 &Config{},
+		outStream:		 outStream,
+		errStream:		 errStream,
 		tmpContainers: make(map[string]struct{}),
-		tmpImages:     make(map[string]struct{}),
-		verbose:       verbose,
-		utilizeCache:  utilizeCache,
-		rm:            rm,
-		sf:            sf,
-		authConfig:    auth,
-		configFile:    authConfigFile,
-		outOld:        outOld,
+		tmpImages:		 make(map[string]struct{}),
+		verbose:			 verbose,
+		cacheBreak:		 cacheBreak,
+		rm:						 rm,
+		sf:						 sf,
+		authConfig:		 auth,
+		configFile:		 authConfigFile,
+		outOld:				 outOld,
 	}
 }
