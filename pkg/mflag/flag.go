@@ -103,6 +103,11 @@ type boolFlag interface {
 	Value
 	IsBoolFlag() bool
 }
+// flag can be used with a value, or without in which case
+// Default() is called to retrieve default value
+type defaultableFlag interface {
+	Default() string
+}
 
 // -- int Value
 type intValue int
@@ -780,11 +785,17 @@ func (f *FlagSet) parseOne() (bool, error) {
 			fv.Set("true")
 		}
 	} else {
-		// It must have a value, which might be the next argument.
-		if !has_value && len(f.args) > 0 {
-			// value is the next arg
-			has_value = true
-			value, f.args = f.args[0], f.args[1:]
+		if !has_value {
+			fv, defaultable := flag.Value.(defaultableFlag)
+			if defaultable && (len(f.args) == 0 || f.args[0][0] == '-') {
+				has_value = true
+				value = fv.Default()
+			// It must have a value, which might be the next argument.
+			} else if len(f.args) > 0 {
+				// value is the next arg
+				has_value = true
+				value, f.args = f.args[0], f.args[1:]
+			}
 		}
 		if !has_value {
 			return false, f.failf("flag needs an argument: -%s", name)

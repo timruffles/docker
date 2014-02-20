@@ -398,3 +398,57 @@ func TestHelp(t *testing.T) {
 		t.Fatal("help was called; should not have been for defined help flag")
 	}
 }
+
+type defaultableString struct {
+	value string
+}
+func (d *defaultableString) Default() string {
+	return "default value"
+}
+func (d *defaultableString) Set(val string) error {
+	d.value = val
+	return nil
+}
+func (d *defaultableString) String() string {
+	return d.value
+}
+
+func TestDefaultable(t *testing.T) {
+	fs := NewFlagSet("defaultable test", ContinueOnError)
+	defaultable := defaultableString{}
+	fs.Var(&defaultable, []string{"flag"}, "defaultable flag")
+	another := fs.String([]string{"another"}, "0", "string value")
+
+	// passing a value should work as normal
+	err := fs.Parse([]string{"-flag=something"})
+	if err != nil {
+		t.Fatal("Should have worked default with value, got",err)
+	}
+	if defaultable.value == "default value" {
+		t.Fatal("Value provided - should not have been set to default",err)
+	}
+	if defaultable.value != "something" {
+		t.Fatal("Value provided - should have been set",err)
+	}
+
+	// not passing a value should should cause a UseDefault() call
+	err = fs.Parse([]string{"-flag","-another","anotherVal"})
+	if err != nil {
+		t.Fatal("Should have worked for default followed by another flag, got",err)
+	}
+	if defaultable.value != "default value" {
+		t.Fatal("Flag after defaultable flag - should have used Default()",err)
+	}
+	if *another != "anotherVal" {
+		t.Fatal("defaultable flag stopped following string working, should have got 'anotherVal', got",another)
+	}
+
+	// not passing a value should should cause a UseDefault() call
+	err = fs.Parse([]string{"-flag"})
+	if err != nil {
+		t.Fatal("Should have worked for default at end of args, got",err)
+	}
+	if defaultable.value != "default value" {
+		t.Fatal("Nothing after defaultable flag - should have used Default()",err)
+	}
+}
