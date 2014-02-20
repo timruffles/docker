@@ -166,13 +166,14 @@ func MkBuildContext(dockerfile string, files [][2]string) (archive.Archive, erro
 
 type noCacheFlag struct {
 	value string
-	present bool
 }
 func (n *noCacheFlag) String() string {
 	return n.value
 }
+func (n *noCacheFlag) Default() string {
+	return ".*"
+}
 func (n *noCacheFlag) Set(val string) error {
-	n.present = true
 	if _, err := regexp.Compile(val); err != nil {
 		return err
 	}
@@ -184,7 +185,7 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	cmd := cli.Subcmd("build", "[OPTIONS] PATH | URL | -", "Build a new container image from the source code at PATH")
 	tag := cmd.String([]string{"t", "-tag"}, "", "Repository name (and optionally a tag) to be applied to the resulting image in case of success")
 	suppressOutput := cmd.Bool([]string{"q", "-quiet"}, false, "Suppress verbose build output")
-	noCache := &noCacheFlag{present:false}
+	noCache := &noCacheFlag{}
 	cmd.Var(noCache,[]string{"#no-cache", "-no-cache"}, "Do not use cache when building the image. Provide a string to use as a regex to instead selectively ignore cached RUN commands")
 	rm := cmd.Bool([]string{"#rm", "-rm"}, false, "Remove intermediate containers after a successful build")
 	if err := cmd.Parse(args); err != nil {
