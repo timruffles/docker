@@ -25,6 +25,8 @@ import (
 	gosignal "os/signal"
 	"path"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	goruntime "runtime"
 	"strconv"
 	"strings"
@@ -409,7 +411,7 @@ func (srv *Server) Build(job *engine.Job) engine.Status {
 		remoteURL      = job.Getenv("remote")
 		repoName       = job.Getenv("t")
 		suppressOutput = job.GetenvBool("q")
-		noCache        = job.GetenvBool("nocache")
+		noCache        = job.Getenv("nocache")
 		rm             = job.GetenvBool("rm")
 		authConfig     = &registry.AuthConfig{}
 		configFile     = &registry.ConfigFile{}
@@ -459,6 +461,15 @@ func (srv *Server) Build(job *engine.Job) engine.Status {
 	}
 	defer context.Close()
 
+	var noCacheRe *regexp.Regexp
+	if noCache != "" {
+		re, err := regexp.CompilePOSIX(noCache)
+		if err != nil {
+			return job.Error(err)
+		}
+		noCacheRe = re
+	}
+
 	sf := utils.NewStreamFormatter(job.GetenvBool("json"))
 	b := NewBuildFile(srv,
 		&utils.StdoutFormater{
@@ -469,7 +480,7 @@ func (srv *Server) Build(job *engine.Job) engine.Status {
 			Writer:          job.Stdout,
 			StreamFormatter: sf,
 		},
-		!suppressOutput, !noCache, rm, job.Stdout, sf, authConfig, configFile)
+		!suppressOutput, noCacheRe, rm, job.Stdout, sf, authConfig, configFile)
 	id, err := b.Build(context)
 	if err != nil {
 		return job.Error(err)

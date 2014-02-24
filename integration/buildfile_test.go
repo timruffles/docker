@@ -12,9 +12,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+var ignoreCacheRe *regexp.Regexp = regexp.MustCompilePOSIX(".*")
+var useCacheRe *regexp.Regexp
 
 // A testContextTemplate describes a build context and how to test it
 type testContextTemplate struct {
@@ -352,7 +356,7 @@ func TestBuild(t *testing.T) {
 	}
 }
 
-func buildImage(context testContextTemplate, t *testing.T, eng *engine.Engine, useCache bool) (*image.Image, error) {
+func buildImage(context testContextTemplate, t *testing.T, eng *engine.Engine, useCache interface{}) (*image.Image, error) {
 	if eng == nil {
 		eng = NewTestEngine(t)
 		runtime := mkRuntimeFromEngine(eng, t)
@@ -384,7 +388,21 @@ func buildImage(context testContextTemplate, t *testing.T, eng *engine.Engine, u
 	}
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := server.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, useCache, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
+	var cacheBreak *regexp.Regexp
+	if bv, ok := useCache.(bool); ok {
+		if bv {
+			cacheBreak = nil
+		} else {
+			cacheBreak = ignoreCacheRe
+		}
+	} else {
+		if sv, ok := useCache.(string); ok {
+			cacheBreak = regexp.MustCompilePOSIX(sv)
+		} else {
+			t.Fatal("Invalid argument for cache:", useCache)
+		}
+	}
+	buildfile := server.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, cacheBreak, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
 	id, err := buildfile.Build(context.Archive(dockerfile, t))
 	if err != nil {
 		return nil, err
@@ -634,6 +652,51 @@ func TestBuildImageWithoutCache(t *testing.T) {
 	checkCacheBehavior(t, template, false)
 }
 
+func TestBuildImageCacheRegexpSkips(t *testing.T) {
+
+	template := testContextTemplate{`
+        from {IMAGE}
+        maintainer dockerio
+        RUN date > some-file
+        `,
+		nil, nil}
+	eng := NewTestEngine(t)
+	defer nuke(mkRuntimeFromEngine(eng, t))
+
+	img1, err := buildImage(template, t, eng, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	img1Again, err := buildImage(template, t, eng, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if img1.ID != img1Again.ID {
+		t.Fatal("Expected to cache with cache enabled")
+	}
+
+	img1RegexpMiss, err := buildImage(template, t, eng, "no match")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if img1.ID != img1RegexpMiss.ID {
+		t.Fatal("Expected to cache when cache bust regexp misses all commands")
+	}
+
+	img2, err := buildImage(template, t, eng, "date > some-file")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if img1.ID == img2.ID {
+		t.Fatal("Expected cache not to be used")
+	}
+
+}
+
 func TestBuildADDLocalFileWithCache(t *testing.T) {
 	template := testContextTemplate{`
         from {IMAGE}
@@ -818,7 +881,7 @@ func TestForbiddenContextPath(t *testing.T) {
 	}
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := server.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, true, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
+	buildfile := server.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, useCacheRe, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
 	_, err = buildfile.Build(context.Archive(dockerfile, t))
 
 	if err == nil {
@@ -864,7 +927,7 @@ func TestBuildADDFileNotFound(t *testing.T) {
 	}
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
-	buildfile := server.NewBuildFile(mkServerFromEngine(eng, t), ioutil.Discard, ioutil.Discard, false, true, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
+	buildfile := server.NewBuildFile(mkServerFromEngine(eng, t), ioutil.Discard, ioutil.Discard, false, useCacheRe, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
 	_, err = buildfile.Build(context.Archive(dockerfile, t))
 
 	if err == nil {

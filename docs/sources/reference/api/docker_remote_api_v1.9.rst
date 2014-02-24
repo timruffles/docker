@@ -1044,7 +1044,7 @@ Build an image from Dockerfile
 
    :query t: repository name (and optionally a tag) to be applied to the resulting image in case of success
    :query q: suppress verbose build output
-   :query nocache: do not use the cache when building the image
+   :query nocache: a POSIX ERE regexp string used to selectively disable cache for matching ADD and RUN commands. 
    :query rm: Remove intermediate containers after a successful build
    :reqheader Content-type: should be set to ``"application/tar"``.
    :reqheader X-Registry-Config: base64-encoded ConfigFile object
