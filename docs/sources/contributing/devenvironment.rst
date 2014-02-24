@@ -130,6 +130,10 @@ If the test are successful then the tail of the output should look something lik
 	PASS
 	ok  	github.com/dotcloud/docker/utils	0.017s
 
+If `$TESTFLAGS` is set in the environment, it is passed as extra arguments to 'go test'.
+You can use this to select certain tests to run, eg.
+
+  TESTFLAGS='-run ^TestBuild$' ./hack/make.sh test
 
 
 
