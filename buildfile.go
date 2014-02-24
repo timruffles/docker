@@ -168,7 +168,7 @@ func (b *buildFile) CmdRun(args string) error {
 
 	utils.Debugf("Command to be executed: %v", b.config.Cmd)
 
-	if b.utilizeCache(cmd) {
+	if b.utilizeCache(b.config.Cmd) {
 
 		hit, err := b.probeCache()
 		if err != nil {
@@ -469,7 +469,7 @@ func (b *buildFile) CmdAdd(args string) error {
 	}
 
 	// Hash path and check the cache
-	if b.utilizeCache(cmd) {
+	if b.utilizeCache(b.config.Cmd) {
 		var (
 			hash string
 			sums = b.context.GetSums()

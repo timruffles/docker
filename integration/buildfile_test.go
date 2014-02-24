@@ -16,6 +16,7 @@ import (
 )
 
 var ignoreCacheRe *regexp.Regexp = regexp.MustCompile(".*")
+var useCacheRe *regexp.Regexp
 
 // mkTestContext generates a build context from the contents of the provided dockerfile.
 // This context is suitable for use as an argument to BuildFile.Build()
@@ -292,7 +293,7 @@ func TestBuild(t *testing.T) {
 	}
 }
 
-func buildImage(context testContextTemplate, t *testing.T, eng *engine.Engine, useCache bool) (*docker.Image, error) {
+func buildImage(context testContextTemplate, t *testing.T, eng *engine.Engine, useCache interface{}) (*docker.Image, error) {
 	if eng == nil {
 		eng = NewTestEngine(t)
 		runtime := mkRuntimeFromEngine(eng, t)
@@ -325,10 +326,18 @@ func buildImage(context testContextTemplate, t *testing.T, eng *engine.Engine, u
 	dockerfile := constructDockerfile(context.dockerfile, ip, port)
 
 	var cacheBreak *regexp.Regexp
-	if useCache {
-		cacheBreak = nil
+	if bv, ok := useCache.(bool); ok {
+		if bv {
+			cacheBreak = nil
+		} else {
+			cacheBreak = ignoreCacheRe
+		}
 	} else {
-		cacheBreak = ignoreCacheRe
+		if sv, ok := useCache.(string); ok {
+			cacheBreak = regexp.MustCompile(sv)
+		} else {
+			t.Fatal("Invalid argument for cache:",useCache)
+		}
 	}
 
 	buildfile := docker.NewBuildFile(srv, ioutil.Discard, ioutil.Discard, false, cacheBreak, false, ioutil.Discard, utils.NewStreamFormatter(false), nil, nil)
@@ -552,12 +561,48 @@ func TestBuildImageWithoutCache(t *testing.T) {
 }
 
 func TestBuildImageCacheRegexpSkips(t *testing.T) {
+
 	template := testContextTemplate{`
         from {IMAGE}
         maintainer dockerio
-        RUN touch some-file
+        RUN date > some-file
         `,
 		nil, nil}
+	eng := NewTestEngine(t)
+	defer nuke(mkRuntimeFromEngine(eng, t))
+
+	img1, err := buildImage(template, t, eng, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	img1Again, err := buildImage(template, t, eng, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if img1.ID != img1Again.ID {
+		t.Fatal("Expected to cache with cache enabled")
+	}
+
+	img1RegexpMiss, err := buildImage(template, t, eng, "no match")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if img1.ID != img1RegexpMiss.ID {
+		t.Fatal("Expected to cache when cache bust regexp misses all commands")
+	}
+
+	img2, err := buildImage(template, t, eng, "date > some-file")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if img1.ID == img2.ID {
+		t.Fatal("Expected cache not to be used")
+	}
+
 }
 
 func TestBuildADDLocalFileWithCache(t *testing.T) {
